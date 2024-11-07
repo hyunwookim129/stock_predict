@@ -1,4 +1,4 @@
-# stock
+## stock prediction
 
 국방 AI 경진대회를 준비하기 위해 엘리스에서 인공지능 공부를 시작하였습니다. 공부를 진행하는 와중 주가 예측하는 예시가 있었고, 경제와 주식에 관심이 있던 저는 이 예시를 단순 따라 하기보다는 나만의 방식과 모델을 만들고 싶은 욕구가 생겼습니다. 학습 내용은 하루 뒤 주가 예측이었고 사용하는 데이터도 주가 하나만을 사용했습니다.
 
@@ -21,21 +21,21 @@ from datetime import datetime
 import pandas as pd
 import os
 
-# 폴더 생성
+### 폴더 생성
 folder_path = '/content/Stocks'
 os.makedirs(folder_path, exist_ok=True)
 
-# 하이닉스 주가 와 vix 데이터 불러오기 날짜: '2019-03-01' 에서 오늘
+### 하이닉스 주가 와 vix 데이터 불러오기 날짜: '2019-03-01' 에서 오늘
 SK_Hynix = yf.download('000660.KS', start='2019-03-01', end=datetime.today().strftime('%Y-%m-%d'))
 vix_data = yf.download('^VIX', start='2019-03-01',  end=datetime.today().strftime('%Y-%m-%d'))
 
-# CSV 형태로 저장
+### CSV 형태로 저장
 SK_Hynix.to_csv('Stocks/SK하이닉스.csv')
 vix_data.to_csv('Stocks/vix_data.csv')
 
-#데이터 정제
+## 데이터 정제
 
-# 상관관계가 높은 데이터 제거
+### 상관관계가 높은 데이터 제거
 columns_to_drop = ['Open', 'Low', 'High', 'Adj Close']
 data_df = pd.read_csv('./Stocks/SK하이닉스.csv', index_col="Date")
 data_df = data_df.drop(columns=columns_to_drop)
@@ -43,35 +43,35 @@ data_df = data_df.drop(columns=columns_to_drop)
 vix_data = pd.read_csv('./Stocks/vix_data.csv', index_col="Date")
 columns_to_drop = ['Volume','Open', 'Low', 'High', 'Adj Close']
 
-# 겹치는 헤더가 있어 해더 이름 바꾸기
+### 겹치는 헤더가 있어 해더 이름 바꾸기
 vix_data = vix_data.drop(columns=columns_to_drop)
 vix_data = vix_data.rename(columns={'Close': 'VIXclose'})
 
-# 두 데이터 합체
+### 두 데이터 합체
 merged_data = data_df.merge(vix_data, left_index=True, right_index=True, how='left')
 
-# drop na. 미국 데이터랑 한국 데이터라 마켓이 오픈되있는 날이 다름. 겹치지 않은 적은 데이터 드랍
+### drop na. 미국 데이터랑 한국 데이터라 마켓이 오픈되있는 날이 다름. 겹치지 않은 적은 데이터 드랍
 merged_data.to_csv('./Stocks/SK하이닉스_with_VIX.csv')
 merged_data = merged_data.dropna()
 
-# 5일뒤 가격을 타겟으로 놓기 위해 close 데이터 5일씩 앞으로
+### 5일뒤 가격을 타겟으로 놓기 위해 close 데이터 5일씩 앞으로
 merged_data['Target'] = merged_data['Close'].shift(-5)
 
-#혹시 모를 na 다시 드랍
+### 혹시 모를 na 다시 드랍
 merged_data = merged_data.dropna()
 
-# MinMaxScaler 를 통해 정규화
+### MinMaxScaler 를 통해 정규화
 scaler = MinMaxScaler()
 merged_data[['Close', 'Volume', 'VIXclose']] = scaler.fit_transform(merged_data[['Close', 'Volume', 'VIXclose']])
 
-# 후에 Target 만 reverse 해야하기 때문에 다른 이름으로 타겟 정규화
+### 후에 Target 만 reverse 해야하기 때문에 다른 이름으로 타겟 정규화
 scaler1 = MinMaxScaler()
 merged_data['Target'] = scaler1.fit_transform(merged_data['Target'].values.reshape(-1,1))
 
-# 정제된 데이터 확인
+### 정제된 데이터 확인
 print(merged_data)
 
-# 테스트 트레이닝 데이터 분리
+### 테스트 트레이닝 데이터 분리
 train_size = int(len(merged_data) * 0.80)  # 데이터의 80% 를 사용해 학습
 train_data = merged_data.values[:train_size]
 test_data = merged_data.values[train_size:]
@@ -87,28 +87,28 @@ seq_length = 10  # 최근 10일 데이터 사용
 X_train, y_train = create_sequences(train_data, seq_length)
 X_test, y_test = create_sequences(test_data, seq_length)
 
-# single layer LSTM 모델
+### single layer LSTM 모델
 model = Sequential()
 model.add(LSTM(25, input_shape=(X_train.shape[1], X_train.shape[2])))
 model.add(Dense(1))
 model.compile(optimizer=Adam(), loss=MeanSquaredError())
 
-# 학습
+### 학습
 model.fit(X_train, y_train, epochs=50, batch_size=32, verbose=1)
 
-# 평가
+### 평가
 loss = model.evaluate(X_test, y_test, verbose=0)
 print(f"Test Loss: {loss}")
 
-# 결과 시각화
+### 결과 시각화
 import matplotlib.pyplot as plt
 
-# Inverse scaling 사용해 실제 가격 반영
+### Inverse scaling 사용해 실제 가격 반영
 predicted_prices_scaled = model.predict(X_test)
 predicted_actual = scaler1.inverse_transform(np.array(predicted_prices_scaled).reshape(-1,1))
 actual_price = scaler1.inverse_transform(np.array(y_test).reshape(-1,1))
 
-# 시각화
+### 시각화
 plt.figure(figsize=(12, 6))
 plt.plot(actual_price, label='Actual Price', color='blue')
 plt.plot(predicted_actual, label='Predicted Price', color='red')
